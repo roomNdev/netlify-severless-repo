@@ -20,7 +20,7 @@ const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes in milliseconds
 
 export const handler: Handler = async (
   event: HandlerEvent,
-  context: HandlerContext
+  context: HandlerContext,
 ): Promise<HandlerResponse> => {
   try {
     const durationFromLastFetch = cache.timestamp
@@ -73,8 +73,8 @@ export const handler: Handler = async (
     cache.query = q;
     const headers = {
       'Access-Control-Allow-Origin': '*', // Allows all origins
-      'Access-Control-Allow-Headers': 'Content-Type', // Allows Content-Type header
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', // Allows specified methods
+      'Access-Control-Allow-Headers': '*', // Allows Content-Type header
+      'Access-Control-Allow-Methods': '*', // Allows specified methods
     };
     console.log('Returning new fetched data length:', text.length);
 
@@ -145,7 +145,7 @@ function extractItemsFromHTML(html: string, query: string) {
 }
 
 function parsePrice(
-  priceStr: string
+  priceStr: string,
 ): { value: number; currency: string; symbol: string } | null {
   const parseCurrency = require('parsecurrency');
   if (priceStr.trim() === '') {
@@ -160,15 +160,15 @@ function calculateSalesMetrics(items: any[]) {
   const totalSales = items.length;
   const p75 = quantile(
     items.map((item) => item.price),
-    0.75
+    0.75,
   );
   const p25 = quantile(
     items.map((item) => item.price),
-    0.25
+    0.25,
   );
   const median = quantile(
     items.map((item) => item.price),
-    0.5
+    0.5,
   );
   return {
     count: totalSales,

@@ -20,7 +20,7 @@ const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes in milliseconds
 
 export const handler: Handler = async (
   event: HandlerEvent,
-  context: HandlerContext
+  context: HandlerContext,
 ): Promise<HandlerResponse> => {
   const durationFromLastFetch = cache.timestamp
     ? Date.now() - cache.timestamp
