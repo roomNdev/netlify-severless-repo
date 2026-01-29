@@ -23,34 +23,48 @@ export const handler: Handler = async (
   context: HandlerContext,
 ): Promise<HandlerResponse> => {
   try {
-    const durationFromLastFetch = cache.timestamp
-      ? Date.now() - cache.timestamp
-      : null;
+    // const durationFromLastFetch = cache.timestamp
+    //   ? Date.now() - cache.timestamp
+    //   : null;
 
-    const { q } = event.queryStringParameters || {};
-    const formatItemName = q?.replace(/ /g, '+') ?? '';
-    if (!q || q.trim() === '') {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Missing query parameter q' }),
-      };
-    }
+    // const { q } = event.queryStringParameters || {};
+    // const formatItemName = q?.replace(/ /g, '+') ?? '';
+    // if (!q || q.trim() === '') {
+    //   return {
+    //     statusCode: 400,
+    //     body: JSON.stringify({ error: 'Missing query parameter q' }),
+    //   };
+    // }
 
-    if (
-      cache.data &&
-      durationFromLastFetch !== null &&
-      durationFromLastFetch < CACHE_DURATION &&
-      cache.query === q
-    ) {
-      console.log('Returning cached data');
+    // if (
+    //   cache.data &&
+    //   durationFromLastFetch !== null &&
+    //   durationFromLastFetch < CACHE_DURATION &&
+    //   cache.query === q
+    // ) {
+    //   console.log('Returning cached data');
+    //   return {
+    //     statusCode: 200,
+    //     headers: {
+    //       'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+    //       'Access-Control-Allow-Headers': '*',
+    //       'Access-Control-Allow-Methods': '*',
+    //     },
+    //     body: JSON.stringify(cache.data),
+    //   };
+    // }
+
+    // Handle preflight OPTIONS request
+    if (event.httpMethod === 'OPTIONS') {
+      console.log('Handling preflight OPTIONS request');
       return {
-        statusCode: 200,
+        statusCode: 200, // Must be 200 for preflight to succeed
         headers: {
           'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
           'Access-Control-Allow-Headers': '*',
           'Access-Control-Allow-Methods': '*',
         },
-        body: JSON.stringify(cache.data),
+        body: 'Preflight check successful',
       };
     }
 
