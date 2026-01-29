@@ -109,6 +109,11 @@ export const handler: Handler = async (
     console.log('Error in handler:', error);
     return {
       statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': '*',
+      },
       body: JSON.stringify({ error: 'Internal Server Error', message: error }),
     };
   }

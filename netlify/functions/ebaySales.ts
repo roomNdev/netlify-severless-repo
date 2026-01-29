@@ -21,26 +21,73 @@ export const handler: Handler = async (
   event: HandlerEvent,
   context: HandlerContext,
 ): Promise<HandlerResponse> => {
-  const durationFromLastFetch = cache.timestamp
-    ? Date.now() - cache.timestamp
-    : null;
+  try {
+    const durationFromLastFetch = cache.timestamp
+      ? Date.now() - cache.timestamp
+      : null;
 
-  const { q } = event.queryStringParameters || {};
-  const formatItemName = q?.replace(/ /g, '+') ?? '';
-  if (!q || q.trim() === '') {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Missing query parameter q' }),
+    const { q } = event.queryStringParameters || {};
+    const formatItemName = q?.replace(/ /g, '+') ?? '';
+    if (!q || q.trim() === '') {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing query parameter q' }),
+      };
+    }
+
+    if (
+      cache.data &&
+      durationFromLastFetch !== null &&
+      durationFromLastFetch < CACHE_DURATION &&
+      cache.query === q
+    ) {
+      console.log('Returning cached data');
+      return {
+        statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+          'Access-Control-Allow-Headers': '*',
+          'Access-Control-Allow-Methods': '*',
+        },
+        body: JSON.stringify(cache.data),
+      };
+    }
+
+    // Handle preflight OPTIONS request
+    if (event.httpMethod === 'OPTIONS') {
+      console.log('Handling preflight OPTIONS request');
+      return {
+        statusCode: 200, // Must be 200 for preflight to succeed
+        headers: {
+          'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+          'Access-Control-Allow-Headers': '*',
+          'Access-Control-Allow-Methods': '*',
+        },
+        body: 'Preflight check successful',
+      };
+    }
+
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240`;
+    const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
+    const response = await client.get({ url: scrapURL });
+
+    const rawHTML = await response.data;
+    const text = extractSellItemsFromHTML(rawHTML, q);
+
+    cache.data = {
+      query: q,
+
+      items: text,
+      source: 'scrapingbee',
+      cached: true,
     };
-  }
-
-  if (
-    cache.data &&
-    durationFromLastFetch !== null &&
-    durationFromLastFetch < CACHE_DURATION &&
-    cache.query === q
-  ) {
-    console.log('Returning cached data');
+    cache.timestamp = Date.now();
+    cache.query = q;
+    const headers = {
+      'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Allow-Methods': '*',
+    };
     return {
       statusCode: 200,
       headers: {
@@ -48,58 +95,26 @@ export const handler: Handler = async (
         'Access-Control-Allow-Headers': '*',
         'Access-Control-Allow-Methods': '*',
       },
-      body: JSON.stringify(cache.data),
+      body: JSON.stringify({
+        query: q,
+        items: text,
+        source: 'scrapingbee',
+        cached: false,
+      }),
     };
-  }
-
-  // Handle preflight OPTIONS request
-  if (event.httpMethod === 'OPTIONS') {
-    console.log('Handling preflight OPTIONS request');
+  } catch (error) {
+    console.log('Error in handler:', error);
     return {
-      statusCode: 200, // Must be 200 for preflight to succeed
+      statusCode: 500,
       headers: {
         'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
         'Access-Control-Allow-Headers': '*',
         'Access-Control-Allow-Methods': '*',
       },
-      body: 'Preflight check successful',
+      body: JSON.stringify({ error: 'Internal Server Error', message: error }),
     };
   }
-
-  const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240`;
-  const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
-  const response = await client.get({ url: scrapURL });
-
-  const rawHTML = await response.data;
-  const text = extractSellItemsFromHTML(rawHTML, q);
-
-  cache.data = {
-    query: q,
-
-    items: text,
-    source: 'scrapingbee',
-    cached: true,
-  };
-  cache.timestamp = Date.now();
-  cache.query = q;
-  const headers = {
-    'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
-    'Access-Control-Allow-Headers': '*',
-    'Access-Control-Allow-Methods': '*',
-  };
-  return {
-    statusCode: 200,
-    headers,
-    body: JSON.stringify({
-      query: q,
-
-      items: text,
-      source: 'scrapingbee',
-      cached: false,
-    }),
-  };
 };
-
 function extractSellItemsFromHTML(html: string, query: string) {
   const $ = cheerio.load(html);
   const items: any[] = [];
