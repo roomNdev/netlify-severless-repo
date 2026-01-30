@@ -69,6 +69,7 @@ export const handler: Handler = async (
     }
 
     const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240`;
+    console.log('Fetching data from URL: ', scrapURL);
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
     const response = await client.get({ url: scrapURL });
 
@@ -88,6 +89,7 @@ export const handler: Handler = async (
     const headers = {
       'access-control-allow-origin': '*',
     };
+    console.log('SUCCESS');
     console.log('Returning new fetched data length:', text.length);
 
     return {
@@ -148,7 +150,6 @@ function extractItemsFromHTML(html: string, query: string) {
     if (title !== 'Shop on eBay' && parsedPrice && soldDate && condition) {
       const beautyCondition = condition.replace(' · ', '');
       // compare item name to search string so we will have a weight system to determine the resell value
-      console.log('tile is ', title);
       const resultData = {
         title,
         price: parsedPrice?.value,
@@ -159,6 +160,10 @@ function extractItemsFromHTML(html: string, query: string) {
         itemUrl,
         shipping: shippingCost,
       };
+      console.log(
+        `Extracted item: ${title} - $${parsedPrice.value} - Sold on ${soldDate}`,
+      );
+
       items.push(resultData);
     }
   });
