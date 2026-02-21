@@ -156,7 +156,10 @@ function extractSellItemsFromHTML(html: string, query: string) {
     const price = $(element).find('.s-card__price').text();
 
     const parsedPrice = parsePrice(price);
-
+    if (parsedPrice?.symbol !== '$') {
+      console.log(`Skipping item with non-USD currency: ${title} - ${price}`);
+      return;
+    }
     const subtile = $(element).find('.s-card__subtitle');
     const condition = subtile.find('span').first().text();
 
@@ -271,11 +274,10 @@ async function fetchSerp(q: string) {
   const u = new URL('https://serpapi.com/search.json');
   u.searchParams.set('engine', 'ebay');
   u.searchParams.set('ebay_domain', 'ebay.com');
-  u.searchParams.set('q', q);
-  u.searchParams.set('sold', 'false');
-  u.searchParams.set('completed', 'false');
+  u.searchParams.set('_ipg', '200');
   u.searchParams.set('_nkw', q);
-  u.searchParams.set('LH_PrefLoc', '3');
+  // u.searchParams.set('show_only', '');
+  // u.searchParams.set('LH_PrefLoc', 'Domestic');
   u.searchParams.set('api_key', SERP_KEY);
   const r = await fetch(u.toString());
   if (!r.ok) {
@@ -294,7 +296,7 @@ async function fetchSerp(q: string) {
         imageUrl: it.thumbnail || '',
         itemUrl: it.link || '',
         soldDate: it.sold_at || new Date().toISOString(),
-        shipping: getShippingCost(it.shipping),
+        shipping: it.shipping ? getShippingCost(it.shipping) : 'Unknown',
         condition: it.condition || 'Unknown',
       };
     })
