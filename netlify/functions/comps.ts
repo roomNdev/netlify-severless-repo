@@ -79,10 +79,10 @@ export const handler: Handler = async (
       };
     }
 
-    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&LH_PrefLoc=3&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240`;
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&LH_PrefLoc=1&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240&_salic=1`;
     console.log('Fetching data from URL: ', scrapURL);
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
-    const response = await client.get({ url: scrapURL, timeout: 60000 });
+    const response = await client.get({ url: scrapURL, params: { timeout: 140000 } });
 
     const rawHTML = await response.data;
     let data = extractItemsFromHTML(rawHTML, q);
@@ -314,6 +314,9 @@ async function fetchSerp(q: string) {
   u.searchParams.set('show_only', 'Sold,Complete');
   u.searchParams.set('_ipg', '200');
   u.searchParams.set('_nkw', q);
+  u.searchParams.set('LH_PrefLoc', '1');
+  u.searchParams.set('_salic', '1');
+  u.searchParams.set('no_cache', 'true');
   // u.searchParams.set('LH_Sold', '1');
   // u.searchParams.set('LH_Complete', '1');
   // u.searchParams.set('LH_PrefLoc', 'Domestic');

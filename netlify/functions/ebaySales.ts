@@ -78,9 +78,9 @@ export const handler: Handler = async (
       };
     }
 
-    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240&LH_PrefLoc=3`;
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240&_salic=1&LH_PrefLoc=1`;
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
-    const response = await client.get({ url: scrapURL });
+    const response = await client.get({ url: scrapURL, params: { timeout: 140000 } });
 
     const rawHTML = await response.data;
     let items = extractSellItemsFromHTML(rawHTML, q);
@@ -179,6 +179,7 @@ function extractSellItemsFromHTML(html: string, query: string) {
       console.log('title is ', title, 'price is ', price);
       const resultData = {
         title,
+        currency: parsedPrice?.symbol,
         price: parsedPrice?.value,
       };
       items.push(resultData);
@@ -273,11 +274,12 @@ async function fetchSerp(q: string) {
 
   const u = new URL('https://serpapi.com/search.json');
   u.searchParams.set('engine', 'ebay');
-  u.searchParams.set('ebay_domain', 'ebay.com');
-  u.searchParams.set('_ipg', '200');
+  u.searchParams.set('no_cache', 'true');
   u.searchParams.set('_nkw', q);
-  // u.searchParams.set('show_only', '');
-  // u.searchParams.set('LH_PrefLoc', 'Domestic');
+  u.searchParams.set('ebay_domain', 'ebay.com');
+  u.searchParams.set('LH_PrefLoc', '1');
+  u.searchParams.set('_salic', '1');
+  u.searchParams.set('_ipg', '200');
   u.searchParams.set('api_key', SERP_KEY);
   const r = await fetch(u.toString());
   if (!r.ok) {
