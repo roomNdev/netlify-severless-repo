@@ -23,14 +23,14 @@
 
 
         fetchBtn.addEventListener('click', async () => {
-          const url = '/.netlify/functions/comps?q=steam-deck';
+          const url = '/.netlify/functions/comps?q=drone';
           const response = await fetch(url);
           const data = await response.json()
           responseText.innerText = JSON.stringify(data, null, 2)
         })
 
         fetchEbaySellBtn.addEventListener('click', async () => {
-          const url = '/.netlify/functions/ebaySales?q=white+Hoka+On+cloud+athletic+shoes';
+          const url = '/.netlify/functions/ebaySales?q=drone';
           const response = await fetch(url);
           const data = await response.json()
           responseText.innerText = JSON.stringify(data, null, 2)
