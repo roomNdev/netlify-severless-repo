@@ -9,6 +9,7 @@ import 'dotenv/config';
 import * as cheerio from 'cheerio';
 import { ScrapingBeeClient } from 'scrapingbee';
 import parseCurrency from 'parsecurrency';
+import data from '../../public/mock.json'
 
 const cache: { data: any; timestamp: number; query: string } = {
   data: null,
@@ -44,6 +45,74 @@ export const handler: Handler = async (
         body: JSON.stringify({ error: 'Missing query parameter q' }),
       };
     }
+
+    if (!q.toLocaleLowerCase().includes('pikachu') &&
+        !q.toLocaleLowerCase().includes('psp') &&
+        !q.toLocaleLowerCase().includes('coros')  
+  ) {
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+          query: q,
+          items: [],
+          stats: {
+            count: 0,
+            p25: 0,
+            median: 0,
+            p75: 0
+          },
+          source: 'ebay',
+          cached: false,
+        })
+      }
+  }
+  else {
+    if (q.toLocaleLowerCase().includes('pikachu')) {
+      const items = data.pikachu
+      const stats = calculateSalesMetrics(items);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          query: q,
+          items,
+          stats,
+          source: 'ebay',
+          cached: false,
+        })
+      }
+    }
+    if (q.toLocaleLowerCase().includes('psp')) {
+      const items = data.psp
+      const stats = calculateSalesMetrics(items);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          query: q,
+          items,
+          stats,
+          source: 'ebay',
+          cached: false,
+        })
+      }
+    }
+    if (q.toLocaleLowerCase().includes('coros')) {
+      const items = data.coros
+      const stats = calculateSalesMetrics(items);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          query: q,
+          items,
+          stats,
+          source: 'ebay',
+          cached: false,
+        })
+      }
+    }
+  }
 
     if (
       cache.data &&
@@ -87,12 +156,12 @@ export const handler: Handler = async (
     const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&LH_PrefLoc=1&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240&_salic=1`
     // `https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=${formatItemName}&dayRange=30&endDate=${endDate}&startDate=${startDate}&offset=0&limit=50&tabName=SOLD&tz=${TZ}`;
 
-    const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
     if (!process.env.BEE_KEY) {
       throw new Error('ScrapingBee API key not configured');
     }
+    
+    const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
     const response = await client.get({ url: scrapURL, params: {timeout: 140000 } });
-
     const rawHTML = await response.data;
     let items = extractSellItemsFromHTML(rawHTML, q);
     let stats = calculateSalesMetrics(items);
