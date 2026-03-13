@@ -37,6 +37,22 @@ export const handler: Handler = async (
       ? Date.now() - cache.timestamp
       : null;
 
+      
+    // Handle preflight OPTIONS request
+    if (event.httpMethod === 'OPTIONS') {
+      console.log('Handling preflight OPTIONS request');
+      return {
+        statusCode: 200, // Must be 200 for preflight to succeed
+        headers: {
+          'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+          'Access-Control-Allow-Headers': '*',
+          'Access-Control-Allow-Methods': '*',
+        },
+        body: 'Preflight check successful',
+      };
+    }
+
+
     const { q } = event.queryStringParameters || {};
     const formatItemName = q?.replace(/ /g, '+') ?? '';
     if (!q || q.trim() === '') {
@@ -129,20 +145,6 @@ export const handler: Handler = async (
           'Access-Control-Allow-Methods': '*',
         },
         body: JSON.stringify(cache.data),
-      };
-    }
-
-    // Handle preflight OPTIONS request
-    if (event.httpMethod === 'OPTIONS') {
-      console.log('Handling preflight OPTIONS request');
-      return {
-        statusCode: 200, // Must be 200 for preflight to succeed
-        headers: {
-          'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
-          'Access-Control-Allow-Headers': '*',
-          'Access-Control-Allow-Methods': '*',
-        },
-        body: 'Preflight check successful',
       };
     }
 
