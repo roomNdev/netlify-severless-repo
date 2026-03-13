@@ -67,6 +67,12 @@ export const handler: Handler = async (
         !q.toLocaleLowerCase().includes('coros')  
   ) {
     return {
+      
+      headers: {
+        'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': '*',
+      },
         statusCode: 200,
         body: JSON.stringify({
           query: q,
@@ -88,6 +94,11 @@ export const handler: Handler = async (
       const stats = calculateSalesMetrics(items);
 
       return {
+      headers: {
+        'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': '*',
+      },
         statusCode: 200,
         body: JSON.stringify({
           query: q,
@@ -103,6 +114,11 @@ export const handler: Handler = async (
       const stats = calculateSalesMetrics(items);
 
       return {
+      headers: {
+        'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': '*',
+      },
         statusCode: 200,
         body: JSON.stringify({
           query: q,
@@ -118,6 +134,11 @@ export const handler: Handler = async (
       const stats = calculateSalesMetrics(items);
 
       return {
+      headers: {
+        'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
+        'Access-Control-Allow-Headers': '*',
+        'Access-Control-Allow-Methods': '*',
+      },
         statusCode: 200,
         body: JSON.stringify({
           query: q,
