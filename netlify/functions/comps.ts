@@ -84,14 +84,14 @@ export const handler: Handler = async (
     // const startDate = thirtyDaysAgo.toISOString().split('T')[0];
     // const endDate = new Date().toISOString().split('T')[0];
 
-    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&LH_PrefLoc=1&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240&_salic=1`
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sacat=0&_from=R40&_sop=12&LH_PrefLoc=1&LH_Complete=1&_ipg=60&LH_Sold=1&_fcid=1`
     // `https://www.ebay.com/sh/research?marketplace=EBAY-US&keywords=${formatItemName}&dayRange=30&endDate=${endDate}&startDate=${startDate}&offset=0&limit=50&tabName=SOLD&tz=${TZ}`;
 
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
     if (!process.env.BEE_KEY) {
       throw new Error('ScrapingBee API key not configured');
     }
-    const response = await client.get({ url: scrapURL, params: {timeout: 140000 } });
+    const response = await client.get({ url: scrapURL, params: {timeout: 140000, country_code: 'us', premium_proxy: true } });
 
     const rawHTML = await response.data;
     let items = extractSellItemsFromHTML(rawHTML, q);
@@ -100,6 +100,7 @@ export const handler: Handler = async (
 
     // Fallback: if scrapingbee returned too few items, try SerpAPI as backup
     if (!items || items.length === 0) {
+      console.log({items});
       const serpItems = (await fetchSerp(q)) || [];
       items = serpItems as any[];
       stats = calculateSalesMetrics(items);
@@ -172,11 +173,11 @@ function extractSellItemsFromHTML(html: string, query: string) {
     const soldDate = $(element).find('.s-card__caption').text();
     const subtile = $(element).find('.s-card__subtitle');
     const condition = subtile.find('span').first().text();
-    const imageDiv = $(element).find('.su-media__image');
+    const imageDiv = $(element).find('.su-image');
     const imageUrl = imageDiv.find('img').attr('src');
     const itemUrl = imageDiv.find('a').attr('href');
     const parsedPrice = parsePrice(price);
-    if (parsedPrice?.symbol !== '$') {
+    if (parsedPrice?.currency !== 'USD' && parsedPrice?.symbol !== '$') {
       console.log(`Skipping item with non-USD currency: ${title} - ${price}`);
       return;
     }
@@ -232,7 +233,7 @@ function parsePrice(
   else {
     const parsed = parseCurrency(priceStr);
   
-    return parsed;
+    return {...parsed, currency: parsed.symbol === '$' && !!parsed.currency ? 'USD' : parsed.currency };
   }
 }
 
@@ -363,7 +364,7 @@ async function fetchSerp(q: string) {
   u.searchParams.set('engine', 'ebay');
   u.searchParams.set('ebay_domain', 'ebay.com');
   u.searchParams.set('show_only', 'Sold,Complete');
-  u.searchParams.set('_ipg', '200');
+  u.searchParams.set('_ipg', '60');
   u.searchParams.set('_nkw', q);
   u.searchParams.set('LH_PrefLoc', '1');
   u.searchParams.set('_salic', '1');
