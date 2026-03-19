@@ -139,7 +139,7 @@ function extractSellItemsFromHTML(html: string, query: string) {
     if (title !== 'Shop on eBay' && condition) {
       const beautyCondition = condition.replace(' · ', '');
       // compare item name to search string so we will have a weight system to determine the resell value
-      console.log('tile is ', title);
+
       const resultData = {
         title,
       };
