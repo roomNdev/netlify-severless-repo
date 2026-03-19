@@ -17,6 +17,17 @@ const cache: { data: any; timestamp: number; query: string } = {
 };
 const CACHE_DURATION = 60 * 60 * 1000; // 60 minutes in milliseconds
 
+type SoldItem = {
+  title: string;
+  price: number;
+  currency?: string;
+  soldDate?: string;
+  condition?: string;
+  imageUrl?: string;
+  itemUrl?: string;
+  shipping?: string;
+};
+
 export const handler: Handler = async (
   event: HandlerEvent,
   context: HandlerContext,
@@ -67,27 +78,48 @@ export const handler: Handler = async (
       };
     }
 
-    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240`;
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240&_salic=1&LH_PrefLoc=1`;
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
-    const response = await client.get({ url: scrapURL });
+    const response = await client.get({
+      url: scrapURL,
+      params: { timeout: 140000 },
+    });
 
     const rawHTML = await response.data;
-    const text = extractSellItemsFromHTML(rawHTML, q);
+    let items = extractSellItemsFromHTML(rawHTML, q);
+    let stats = calculateSalesMetrics(items);
+    let source = 'scrapingbee';
 
-    cache.data = {
-      query: q,
+    // Fallback: if scrapingbee returned too few items, try SerpAPI as backup
+    if (!items || items.length < 3) {
+      const serpItems = (await fetchSerp(q)) || [];
+      items = serpItems as any[];
+      stats = calculateSalesMetrics(items);
+      source = 'serpapi';
 
-      items: text,
-      source: 'scrapingbee',
-      cached: true,
-    };
-    cache.timestamp = Date.now();
-    cache.query = q;
-    const headers = {
-      'Access-Control-Allow-Origin': '*', // Replace 3000 with your actual port
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Allow-Methods': '*',
-    };
+      cache.data = {
+        query: q,
+        stats,
+        items,
+        source,
+        cached: true,
+      };
+      cache.timestamp = Date.now();
+      cache.query = q;
+    } else {
+      stats = calculateSalesMetrics(items);
+
+      cache.data = {
+        query: q,
+        stats,
+        items,
+        source,
+        cached: true,
+      };
+      cache.timestamp = Date.now();
+      cache.query = q;
+    }
+
     return {
       statusCode: 200,
       headers: {
@@ -97,8 +129,9 @@ export const handler: Handler = async (
       },
       body: JSON.stringify({
         query: q,
-        items: text,
-        source: 'scrapingbee',
+        items,
+        stats,
+        source,
         cached: false,
       }),
     };
@@ -115,6 +148,7 @@ export const handler: Handler = async (
     };
   }
 };
+
 function extractSellItemsFromHTML(html: string, query: string) {
   const $ = cheerio.load(html);
   const items: any[] = [];
@@ -122,7 +156,13 @@ function extractSellItemsFromHTML(html: string, query: string) {
   $('.su-card-container').each((index, element) => {
     const tileDiv = $(element).find('.s-card__title');
     const title = tileDiv.find('.primary').text();
+    const price = $(element).find('.s-card__price').text();
 
+    const parsedPrice = parsePrice(price);
+    if (parsedPrice?.symbol !== '$') {
+      console.log(`Skipping item with non-USD currency: ${title} - ${price}`);
+      return;
+    }
     const subtile = $(element).find('.s-card__subtitle');
     const condition = subtile.find('span').first().text();
 
@@ -139,12 +179,131 @@ function extractSellItemsFromHTML(html: string, query: string) {
     if (title !== 'Shop on eBay' && condition) {
       const beautyCondition = condition.replace(' · ', '');
       // compare item name to search string so we will have a weight system to determine the resell value
-
       const resultData = {
         title,
+        currency: parsedPrice?.symbol,
+        price: parsedPrice?.value,
       };
       items.push(resultData);
     }
   });
+  return items;
+}
+
+function calculateSalesMetrics(items: any[]) {
+  const totalSales = items.length;
+  const p75 = quantile(
+    items.map((item) => item.price),
+    0.75,
+  );
+  const p25 = quantile(
+    items.map((item) => item.price),
+    0.25,
+  );
+  const median = quantile(
+    items.map((item) => item.price),
+    0.5,
+  );
+  return {
+    count: totalSales,
+    p25,
+    median,
+    p75,
+  };
+}
+
+function quantile(arr: number[], q: number) {
+  const sorted = [...arr].sort((a, b) => a - b);
+  const pos = (sorted.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  if (sorted[base + 1] !== undefined) {
+    return sorted[base] + rest * (sorted[base + 1] - sorted[base]);
+  } else {
+    return sorted[base];
+  }
+}
+
+function parsePrice(
+  priceStr: string,
+): { value: number; currency: string; symbol: string } | null {
+  const parseCurrency = require('parsecurrency');
+  if (priceStr.trim() === '') {
+    return null;
+  }
+  const parsed = parseCurrency(priceStr);
+
+  return parsed;
+}
+
+// get shipping cost if available
+function getShippingCost(
+  shipping: string | { raw: string; extracted: number },
+) {
+  let shippingCost = 0;
+
+  if (typeof shipping === 'string') {
+    if (
+      !shipping.toLowerCase().includes('free') &&
+      !shipping.toLocaleLowerCase().includes('bids') &&
+      shipping.includes('delivery')
+    ) {
+      let formattedShipping = shipping.replace(' delivery', '');
+      formattedShipping = formattedShipping.replace('+', '');
+      const parsedShipping = parsePrice(formattedShipping);
+      if (parsedShipping) {
+        shippingCost = parsedShipping.value;
+      }
+    } else if (
+      !shipping.toLowerCase().includes('free') &&
+      shipping.toLocaleLowerCase().includes('bids')
+    ) {
+      return 'Unknown';
+    }
+  } else {
+    shippingCost = shipping.extracted;
+  }
+
+  return String(shippingCost.toString());
+}
+
+async function fetchSerp(q: string) {
+  const SERP_KEY = process.env.SERP_KEY;
+  if (!SERP_KEY) {
+    console.error('SerpAPI key not configured');
+    return null;
+  }
+
+  const u = new URL('https://serpapi.com/search.json');
+  u.searchParams.set('engine', 'ebay');
+  u.searchParams.set('no_cache', 'true');
+  u.searchParams.set('_nkw', q);
+  u.searchParams.set('ebay_domain', 'ebay.com');
+  u.searchParams.set('LH_PrefLoc', '1');
+  u.searchParams.set('_salic', '1');
+  u.searchParams.set('_ipg', '200');
+  u.searchParams.set('api_key', SERP_KEY);
+  const r = await fetch(u.toString());
+  if (!r.ok) {
+    const error = `SerpAPI ERROR ${r.status}`;
+    console.error(error);
+    throw new Error(error);
+  }
+  const j: any = await r.json();
+  const items: SoldItem[] = (j?.organic_results || [])
+    .map((it: any): SoldItem => {
+      const p = parsePrice(it.price.raw || it.price.raw || '');
+      return {
+        title: it.title || '',
+        price: p?.value || 0,
+        currency: p?.currency || 'USD',
+        imageUrl: it.thumbnail || '',
+        itemUrl: it.link || '',
+        soldDate: it.sold_at || new Date().toISOString(),
+        shipping: it.shipping ? getShippingCost(it.shipping) : 'Unknown',
+        condition: it.condition || 'Unknown',
+      };
+    })
+    .filter((x: SoldItem) => x.title && x.itemUrl && x.price > 0);
   return items;
 }

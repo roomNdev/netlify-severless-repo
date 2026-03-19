@@ -1,3 +1,4 @@
+// netlify/functions/myFunction.ts
 import {
   Handler,
   HandlerEvent,
@@ -78,19 +79,22 @@ export const handler: Handler = async (
       };
     }
 
-    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240`;
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&LH_PrefLoc=1&_sop=12&LH_Sold=1&LH_Complete=1&_ipg=240&_salic=1`;
     console.log('Fetching data from URL: ', scrapURL);
     const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
-    const response = await client.get({ url: scrapURL });
+    const response = await client.get({
+      url: scrapURL,
+      params: { timeout: 140000 },
+    });
 
     const rawHTML = await response.data;
     let data = extractItemsFromHTML(rawHTML, q);
     let source = 'scrapingbee';
-    const stats = calculateSalesMetrics(data);
+    let stats = calculateSalesMetrics(data);
 
     if (!data || data.length < 3) {
       data = (await fetchSerp(q)) || [];
-      const stats = calculateSalesMetrics(data);
+      stats = calculateSalesMetrics(data);
 
       source = 'serpapi';
 
@@ -104,6 +108,8 @@ export const handler: Handler = async (
       cache.timestamp = Date.now();
       cache.query = q;
     } else {
+      stats = calculateSalesMetrics(data);
+
       cache.data = {
         query: q,
         stats,
@@ -173,6 +179,10 @@ function extractItemsFromHTML(html: string, query: string) {
     console.log('---------------------------------------');
     const itemUrl = imageDiv.find('a').attr('href');
     const parsedPrice = parsePrice(price);
+    if (parsedPrice?.symbol !== '$') {
+      console.log(`Skipping item with non-USD currency: ${title} - ${price}`);
+      return;
+    }
     let shipping = null;
     let shippingCost = null;
     // sometimes shipping info is in the second child of .su-card-container__attributes__primary
@@ -190,6 +200,7 @@ function extractItemsFromHTML(html: string, query: string) {
       const resultData = {
         title,
         price: parsedPrice?.value,
+        unparsedPrice: price,
         currency: parsedPrice?.symbol,
         soldDate: convertToDate(soldDate),
         condition: beautyCondition,
@@ -251,14 +262,19 @@ function quantile(arr: number[], q: number) {
 
 // convert "Sold Sep 23, 2025" to Date UTC ISO-8601 UTC date string=
 function convertToDate(dateStr: string) {
-  // Example dateStr: "Sold Sep 23, 2025"
-  const parts = dateStr.replace('Sold ', '').split(' ');
+  try {
+    // Example dateStr: "Sold Sep 23, 2025"
+    const parts = dateStr.replace('Sold ', '').split(' ');
 
-  const month = new Date(Date.parse(parts[1] + ' 1, 2020')).getMonth();
-  const day = parseInt(parts[2], 10);
-  const year = parseInt(parts[3], 10);
-  const date = new Date(Date.UTC(year, month, day));
-  return date.toISOString();
+    const month = new Date(Date.parse(parts[1] + ' 1, 2020')).getMonth();
+    const day = parseInt(parts[2], 10);
+    const year = parseInt(parts[3], 10);
+    const date = new Date(Date.UTC(year, month, day));
+    return date.toISOString();
+  } catch (err) {
+    console.error('Error converting date string:', err);
+    return 'Unknown';
+  }
 }
 
 // get shipping cost if available
@@ -302,10 +318,15 @@ async function fetchSerp(q: string) {
   const u = new URL('https://serpapi.com/search.json');
   u.searchParams.set('engine', 'ebay');
   u.searchParams.set('ebay_domain', 'ebay.com');
-  u.searchParams.set('q', q);
-  u.searchParams.set('sold', 'true');
-  u.searchParams.set('completed', 'true');
+  u.searchParams.set('show_only', 'Sold,Complete');
+  u.searchParams.set('_ipg', '200');
   u.searchParams.set('_nkw', q);
+  u.searchParams.set('LH_PrefLoc', '1');
+  u.searchParams.set('_salic', '1');
+  u.searchParams.set('no_cache', 'true');
+  // u.searchParams.set('LH_Sold', '1');
+  // u.searchParams.set('LH_Complete', '1');
+  // u.searchParams.set('LH_PrefLoc', 'Domestic');
   u.searchParams.set('api_key', SERP_KEY);
   const r = await fetch(u.toString());
   if (!r.ok) {
