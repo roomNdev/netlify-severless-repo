@@ -173,7 +173,7 @@ function extractSellItemsFromHTML(html: string, query: string) {
     const soldDate = $(element).find('.s-card__caption').text();
     const subtile = $(element).find('.s-card__subtitle');
     const condition = subtile.find('span').first().text();
-    let imageDiv = $(element).find('.su-media__image');
+    let imageDiv = $(element).find('.su-image');
     if (!imageDiv || imageDiv.length === 0) {
       imageDiv = $(element).find('.s-card__image');
     }
