@@ -173,8 +173,17 @@ function extractSellItemsFromHTML(html: string, query: string) {
     const soldDate = $(element).find('.s-card__caption').text();
     const subtile = $(element).find('.s-card__subtitle');
     const condition = subtile.find('span').first().text();
-    const imageDiv = $(element).find('.su-image');
+    let imageDiv = $(element).find('.su-media__image');
+    if (!imageDiv || imageDiv.length === 0) {
+      imageDiv = $(element).find('.s-card__image');
+    }
+    if (!imageDiv || imageDiv.length === 0) {
+      imageDiv = $(element).find('.image-treatment');
+    }
     const imageUrl = imageDiv.find('img').attr('src');
+    console.log('+++++++++++++++++++++++++++++++++++++++');
+    console.log('Image URL:', imageUrl);
+    console.log('---------------------------------------');
     const itemUrl = imageDiv.find('a').attr('href');
     const parsedPrice = parsePrice(price);
     if (parsedPrice?.currency !== 'USD' && parsedPrice?.symbol !== '$') {
@@ -206,10 +215,6 @@ function extractSellItemsFromHTML(html: string, query: string) {
         itemUrl,
         shipping: shippingCost,
       };
-      console.log(
-        `Extracted item: ${title} - $${parsedPrice.value} - Sold on ${soldDate} - ${price}`,
-      );
-
       items.push(resultData);
     }
   });
@@ -265,7 +270,6 @@ function quantile(arr: number[], q: number) {
 // convert "Sold Sep 23, 2025" to Date UTC ISO-8601 UTC date string=
 function convertToDate(dateStr: string) {
   try {
-      
     // Example dateStr: "Sold Sep 23, 2025"
     const parts = dateStr.replace('Sold ', '').split(' ');
 
@@ -387,7 +391,6 @@ async function fetchSerp(q: string) {
   const items: SoldItem[] = (j?.organic_results || [])
     .map((it: any): SoldItem => {
       const p = parsePrice(it.price.raw || it.price.raw || '');
-      // console.log(it.shipping, '-shipinh');
       return {
         title: it.title || '',
         price: p?.value || 0,

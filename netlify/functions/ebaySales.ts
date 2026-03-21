@@ -153,10 +153,22 @@ export const handler: Handler = async (
       };
     }
 
-    console.log(`Fetching eBay listings for: "${q}"`);
-    let items = await fetchEbayItems(q);
-    let response = {}
-    let stats = {}
+//     console.log(`Fetching eBay listings for: "${q}"`);
+//     let items = await fetchEbayItems(q);
+//     let response = {}
+//     let stats = {}
+    
+    const scrapURL = `https://www.ebay.com/sch/i.html?_nkw=${formatItemName}&_sop=12&LH_Active=1&_ipg=240&_salic=1&LH_PrefLoc=1`;
+    const client = new ScrapingBeeClient(process.env.BEE_KEY || '');
+    const response = await client.get({
+      url: scrapURL,
+      params: { timeout: 140000 },
+    });
+
+    const rawHTML = await response.data;
+    let items = extractSellItemsFromHTML(rawHTML, q);
+    let stats = calculateSalesMetrics(items);
+    let source = 'scrapingbee';
 
     // Fallback: if scrapingbee returned too few items, try SerpAPI as backup
     if (!items || items.length < 3) {
@@ -204,6 +216,46 @@ export const handler: Handler = async (
   }
 };
 
+function extractSellItemsFromHTML(html: string, query: string) {
+  const $ = cheerio.load(html);
+  const items: any[] = [];
+  console.log(`Extracting items from HTML...`);
+  $('.su-card-container').each((index, element) => {
+    const tileDiv = $(element).find('.s-card__title');
+    const title = tileDiv.find('.primary').text();
+    const price = $(element).find('.s-card__price').text();
+
+    const parsedPrice = parsePrice(price);
+    if (parsedPrice?.symbol !== '$') {
+      console.log(`Skipping item with non-USD currency: ${title} - ${price}`);
+      return;
+    }
+    const subtile = $(element).find('.s-card__subtitle');
+    const condition = subtile.find('span').first().text();
+
+    let shipping = null;
+    let shippingCost = null;
+    // sometimes shipping info is in the second child of .su-card-container__attributes__primary
+    // and sometimes it's not there at all
+    const shippingInfo = $(element)
+      .find('.su-card-container__attributes__primary')
+      .children();
+    if (shippingInfo.length > 1) {
+      const shippingText = $(shippingInfo[2]).text();
+    }
+    if (title !== 'Shop on eBay' && condition) {
+      const beautyCondition = condition.replace(' · ', '');
+      // compare item name to search string so we will have a weight system to determine the resell value
+      const resultData = {
+        title,
+        currency: parsedPrice?.symbol,
+        price: parsedPrice?.value,
+      };
+      items.push(resultData);
+    }
+  });
+  return items;
+}
 
 function calculateSalesMetrics(items: any[]) {
   const totalSales = items.length;
