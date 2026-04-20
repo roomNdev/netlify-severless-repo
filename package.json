@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@netlify/functions": "^4.2.5",
+    "@supabase/supabase-js": "^2.103.3",
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.2",
     "parsecurrency": "^1.1.1",

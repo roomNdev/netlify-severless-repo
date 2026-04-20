@@ -2,7 +2,7 @@
 import Stripe from 'stripe'
 import { Handler, HandlerContext, HandlerEvent, HandlerResponse } from "@netlify/functions";
 
-const YOUR_DOMAIN = (process.env.NODE_ENV === 'production' ? 'http://localhost:8081' :'http://localhost:8081') + '/subscription';
+const YOUR_DOMAIN = (process.env.NODE_ENV === 'production' ? 'http://localhost:8081' :'http://localhost:8081') + '/payments/callback';
 
 export const handler: Handler = async (
   event: HandlerEvent,
@@ -14,6 +14,16 @@ export const handler: Handler = async (
     
     const stripe = new Stripe(STRIPE_KEY)
     
+    const userId = JSON.parse(event.body)?.userId;
+
+    if (!userId) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Missing userId parameter' })
+      };
+    }
+
+
     const prices = await stripe.prices.list({
       expand: ['data.product'],
       recurring: {
@@ -22,19 +32,26 @@ export const handler: Handler = async (
     });
 
     console.log(prices);
-    
-    const priceId = 'price_1TMwcRKkFs1y9M8NyAFNhqjs'
 
-      const session = await stripe.checkout.sessions.create({
-          line_items: [ 
-              {
-                  price: priceId,
-                  quantity: 1,
-              },
-          ],
-          mode: 'subscription',
-          success_url: `${YOUR_DOMAIN}?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      });
+    const priceId = 'price_1TMwcRKkFs1y9M8NyAFNhqjs'
+    const metadata = {
+      userId
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        metadata
+      },
+      metadata,
+      mode: 'subscription',
+      success_url: `${YOUR_DOMAIN}?success=true&session_id={CHECKOUT_SESSION_ID}`,
+    });
 
     return {
       statusCode: 303,
