@@ -14,7 +14,9 @@ export const handler: Handler = async (
     
     const stripe = new Stripe(STRIPE_KEY)
     
-    const userId = JSON.parse(event.body)?.userId;
+    const body = JSON.parse(event.body || '{}');
+    const userId = body.userId;
+    const priceId = body.priceId;
 
     if (!userId) {
       return {
@@ -31,9 +33,8 @@ export const handler: Handler = async (
     //   }
     // });
 
-    // console.log(prices);
+    // console.log({priceId});
 
-    const priceId = event.queryStringParameters?.priceId; // Replace with logic to select the appropriate price
     const metadata = {
       userId
     }
