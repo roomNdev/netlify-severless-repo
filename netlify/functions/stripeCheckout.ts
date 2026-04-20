@@ -2,7 +2,7 @@
 import Stripe from 'stripe'
 import { Handler, HandlerContext, HandlerEvent, HandlerResponse } from "@netlify/functions";
 
-const YOUR_DOMAIN = (process.env.NODE_ENV === 'production' ? 'http://localhost:8081' :'http://localhost:8081') + '/payments/callback';
+const YOUR_DOMAIN = (process.env.NODE_ENV === 'production' ? 'https://quickflipbeta.netlify.app' :'http://localhost:8081') + '/payments/callback';
 
 export const handler: Handler = async (
   event: HandlerEvent,
