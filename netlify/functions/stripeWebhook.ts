@@ -2,6 +2,9 @@ import { Handler, HandlerContext, HandlerEvent, HandlerResponse } from "@netlify
 // import * as Data from '../../public/config.json'
 import Stripe from 'stripe'
 import supabase from "../supabase";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_KEY);
 
 // Type definitions for Stripe objects
 interface StripeCustomer {
@@ -244,7 +247,7 @@ export const handler: Handler = async (
       // // Checkout session events
       case 'checkout.session.completed':
         // console.log(`Checkout session completed: ${req.data.object.id}`);
-        await handleCheckoutCompleted(req.data.object, userId);
+        await handleCheckoutCompleted(req.data.object);
         break;
 
       // Price/Plan events
@@ -414,6 +417,7 @@ async function handleSubscriptionCreated(subscription: StripeSubscription, userI
       }
     }
 
+    let customer = null;
     // Attempt to create or get customer if userId is provided
     if (userId || subscription) {
       const STRIPE_KEY = process.env.STRIPE_PRIVATE_KEY!;
@@ -421,14 +425,15 @@ async function handleSubscriptionCreated(subscription: StripeSubscription, userI
       const stripeCustomer = await stripe.customers.retrieve(stripeCustomerId);
       const email = (stripeCustomer as StripeCustomer).email;
 
-      let { data: customer } = await supabase
+      const { data } = await supabase
         .from('customers')
-        .select('id')
+        .select('id, email')
         .eq('stripe_customer_id', stripeCustomerId)
         .single();
+      customer = data
 
       if (!customer) {
-        await supabase
+        const { data } = await supabase
           .from('customers')
           .insert({
             stripe_customer_id: stripeCustomerId,
@@ -437,11 +442,22 @@ async function handleSubscriptionCreated(subscription: StripeSubscription, userI
             name: (stripeCustomer as StripeCustomer).name || null,
             metadata: (stripeCustomer as StripeCustomer).metadata || {},
           })
-          .select('id')
+          .select('id, email')
           .single();
+          customer = data
+
           console.log(`customer created: ${userId} - ${stripeCustomerId}`);
       }
+
+      const product = await stripe.products.retrieve(subscription.items.data[0].price.product as string);
+
+      const renewalDate = new Date(current_period_end)
+        .toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+      sendSubscriptionEmail(customer.email, product.name, renewalDate, subscription.plan.amount / 100, 'month', 'https://app.quickflip.ai');
     }
+
+    // trigger email after checkout completed
 
     console.log(`Subscription created: ${stripeSubscriptionId}`);
   } catch (error) {
@@ -1006,5 +1022,268 @@ async function handlePriceUpdated(price: StripePrice) {
     console.log(`Price updated: ${stripePriceId} - Status: ${price.status}`);
   } catch (error) {
     console.error('Error in handlePriceUpdated:', error);
+  }
+}
+
+async function sendSubscriptionEmail(email: string, planName: string, renewalDate: string, price: number, billingCycle: string, appURL: string) {
+  try {
+
+    const result = await resend.emails.send({
+      from: 'Quickflip <team@updates.quickflip.ai>',
+      to: email,
+      subject: 'Welcome to Quickflip!',
+      html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to QuickFlip.ai - Your Subscription is Active</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: #f9fafb;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #ef4444 0%, #eab308 100%);
+            padding: 40px 20px;
+            text-align: center;
+        }
+        .header-logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+        .header-title {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            margin: 0;
+            font-family: 'Montserrat', sans-serif;
+        }
+        .content {
+            padding: 40px 30px;
+            color: #1f2937;
+        }
+        .greeting {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 16px 0;
+            color: #111827;
+        }
+        .description {
+            font-size: 16px;
+            line-height: 1.6;
+            margin: 0 0 24px 0;
+            color: #4b5563;
+        }
+        .confirmation-section {
+            background-color: #f3f4f6;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+            text-align: center;
+        }
+        .confirmation-label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+            margin-bottom: 12px;
+        }
+        .confirmation-code {
+            font-size: 32px;
+            font-weight: bold;
+            letter-spacing: 4px;
+            color: #ef4444;
+            font-family: 'Monaco', 'Courier New', monospace;
+            margin: 8px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #ef4444 0%, #eab308 100%);
+            color: white !important;
+            padding: 14px 48px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 16px;
+            margin: 24px 0;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(239, 68, 68, 0.3);
+        }
+        .link-section {
+            background-color: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 24px 0;
+        }
+        .link-text {
+            font-size: 13px;
+            color: #6b7280;
+            margin: 0 0 8px 0;
+        }
+        .link {
+            word-break: break-all;
+            color: #ef4444;
+            text-decoration: none;
+            font-size: 12px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+        .footer {
+            background-color: #f3f4f6;
+            padding: 32px 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer-text {
+            font-size: 13px;
+            color: #6b7280;
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        .divider {
+            border: 0;
+            border-top: 1px solid #e5e7eb;
+            margin: 24px 0;
+        }
+        .features-list {
+            margin: 24px 0;
+            padding: 0;
+            list-style: none;
+        }
+        .features-list li {
+            padding: 8px 0;
+            font-size: 14px;
+            color: #4b5563;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #eab308;
+            padding: 12px 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #78350f;
+        }
+        @media (max-width: 600px) {
+            .content {
+                padding: 24px 16px;
+            }
+            .header {
+                padding: 32px 16px;
+            }
+            .footer {
+                padding: 24px 16px;
+            }
+            .header-title {
+                font-size: 24px;
+            }
+            .greeting {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-logo">
+                <div class="logo-icon" style="justify-content: center; align-items: center;">⚡</div>
+                <h1 class="header-title">QuickFlip.ai</h1>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <p class="greeting">Welcome to QuickFlip.ai! 🚀</p>
+            <p class="description">
+                Your subscription is now active! You've unlocked unlimited access to real market data and pricing insights. Start flipping with confidence today.
+            </p>
+
+            <!-- Subscription Details -->
+            <div class="confirmation-section">
+                <div class="confirmation-label">Subscription Details</div>
+                <p style="font-size: 16px; font-weight: 600; margin: 12px 0; color: #111827;">${planName}</p>
+                <p style="font-size: 13px; color: #6b7280; margin: 4px 0;">Renews on: ${renewalDate}</p>
+                <p style="font-size: 13px; color: #6b7280; margin: 8px 0;">Price: ${price}/${billingCycle}</p>
+            </div>
+
+            <!-- CTA Button -->
+            <div style="text-align: center;">
+                <a href="${appURL}" class="cta-button">Go to App</a>
+            </div>
+
+            <hr class="divider">
+
+            <p class="description" style="font-size: 14px;">
+                <strong>You now have access to:</strong>
+            </p>
+
+            <ul class="features-list">
+                <li>✨ Unlimited photo uploads and link pastes</li>
+                <li>✨ Real sold prices from actual market data</li>
+                <li>✨ Accurate pricing for your flips</li>
+                <li>✨ Early adopter locked-in pricing</li>
+            </ul>
+
+            <div class="warning">
+                💡 <strong>Getting Started Tip:</strong> Download the QuickFlip.ai app to start scanning items instantly. Take a photo or paste a link to get real market prices in seconds!
+            </div>
+
+            <hr class="divider">
+
+            <p class="description" style="font-size: 13px; color: #6b7280;">
+                Questions or need help? <a href="https://app.quickflip.ai/support" style="color: #ef4444; text-decoration: none;">Contact our support team</a>. We're here to help you succeed!
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p class="footer-text">
+                <strong>QuickFlip.ai</strong><br>
+                Know what flips. Instantly.
+            </p>
+            <p class="footer-text">
+                © 2026 QuickFlip.ai. All rights reserved.
+            </p>
+        </div>
+    </div>
+</body>
+</html>`
+    })
+
+    if (result.error) {
+      console.error('Error sending email:', result.error);
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err);
   }
 }
